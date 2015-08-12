@@ -43,6 +43,8 @@ ZiggeoSdk.Connect = {
 	__querystring: require('querystring'),
 	
 	__fs: require("fs"),
+
+	__crypto: require("crypto"),
 	
 	requestChunks: function (method, path, callbacks, data, file, meta, post_process_data) {
 		var options = this.__options(method, path, meta);
@@ -105,6 +107,30 @@ ZiggeoSdk.Connect = {
 		}
 	},
 
+	liveHashChunks: function (method, path, callbacks) {
+		var options = this.__options(method, path);
+		var provider = options.ssl ? this.__https : this.__http;
+		var shasum = this.__crypto.createHash('sha256');		
+		var request = provider.request(options, function (result) {
+			result.on("data", function (chunk) {
+				shasum.update(chunk);
+			}).on("end", function () {
+				if (result.statusCode >= 200 && result.statusCode < 300) {
+					if (callbacks) {
+						if (callbacks.success)
+							callbacks.success(shasum.digest('hex'));
+						else
+							callbacks(shasum.digest('hex'));
+					}
+				} else {
+					if (callbacks.failure)
+						callbacks.failure(result);
+				}
+			});
+		});
+		request.end();
+	},
+
 	requestBinary: function (method, path, callbacks, data, file, meta) {
 		return this.requestChunks(method, path, callbacks, data, file, meta, function (data) {
 			return Buffer.concat(data);
@@ -125,6 +151,10 @@ ZiggeoSdk.Connect = {
 	
 	getBinary: function (path, callbacks, data) {
 		this.requestBinary("GET", path, callbacks, data);
+	},
+
+	getHash: function (path, callbacks, data) {
+		this.liveHashChunks("GET", path, callbacks, data);
 	},
 
 	get: function (path, callbacks, data) {
@@ -193,6 +223,10 @@ ZiggeoSdk.Videos = {
     ZiggeoSdk.Connect.getBinary('/v1/videos/' + token_or_key + '/video', callbacks);
   },
 
+  get_video_hash: function (token_or_key, callbacks) {
+    ZiggeoSdk.Connect.getHash('/v1/videos/' + token_or_key + '/video', callbacks);
+  },
+
   download_image: function (token_or_key, callbacks) {
     ZiggeoSdk.Connect.getBinary('/v1/videos/' + token_or_key + '/image', callbacks);
   },
@@ -227,6 +261,10 @@ ZiggeoSdk.Streams = {
 
   download_video: function (video_token_or_key, token_or_key, callbacks) {
     ZiggeoSdk.Connect.getBinary('/v1/videos/' + video_token_or_key + '/streams/' + token_or_key + '/video', callbacks);
+  },
+
+  get_video_hash: function (video_token_or_key, token_or_key, callbacks) {
+    ZiggeoSdk.Connect.getHash('/v1/videos/' + video_token_or_key + '/streams/' + token_or_key + '/video', callbacks);
   },
 
   download_image: function (video_token_or_key, token_or_key, callbacks) {
